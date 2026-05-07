@@ -25,9 +25,9 @@ class MyAI( AI ):
 		self.X = startX
 		self.Y = startY
 		self.covered = set((x,y) for x in range(colDimension) for y in range(rowDimension))
-		self.covered.remove((startX, startY))
 		self.flags = set()
 		self.moves = []
+		self.safe = set()
 
 	def getNeighbors(self, x, y):
 		dx = [-1, 0, 1]
@@ -44,10 +44,13 @@ class MyAI( AI ):
 		return neighbors
 	
 	def getAction(self, number: int) -> "Action Object":
-		if(number == 0):
-			#self.covered.remove((self.X, self.Y))
+		# if(number == 0):
+		# 	self.covered.remove((self.X, self.Y))
+		# 	self.safe.update((x, y) for x, y in self.getNeighbors(self.X, self.Y) if (x, y) in self.covered)
+		# 	return Action(AI.Action.UNCOVER, self.X, self.Y)
+		if(self.safe):
+			self.X, self.Y = self.safe.pop()
 			return Action(AI.Action.UNCOVER, self.X, self.Y)
-		
 		neighbors = self.getNeighbors(self.X, self.Y)
 		covered_neighbors = [n for n in neighbors if n in self.covered]
 		flagged_neighbors = [n for n in neighbors if n in self.flags]
