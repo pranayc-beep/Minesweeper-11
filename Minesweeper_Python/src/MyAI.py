@@ -25,9 +25,13 @@ class MyAI( AI ):
 		self.X = startX
 		self.Y = startY
 		self.covered = set((x,y) for x in range(colDimension) for y in range(rowDimension))
+		if (startX, startY) in self.covered:
+			self.covered.remove((startX, startY))
 		self.flags = set()
 		self.moves = []
 		self.safe = set()
+		self.board = {}
+
 
 	def getNeighbors(self, x, y):
 		dx = [-1, 0, 1]
@@ -39,7 +43,7 @@ class MyAI( AI ):
 					continue
 				newX = x + i
 				newY = y + j
-				if (0 <= newX < self.rowDimension and 0 <= newY < self.colDimension):
+				if (0 <= newX < self.colDimension and 0 <= newY < self.rowDimension):
 					neighbors.append((newX, newY))
 		return neighbors
 	
@@ -48,36 +52,48 @@ class MyAI( AI ):
 		# 	self.covered.remove((self.X, self.Y))
 		# 	self.safe.update((x, y) for x, y in self.getNeighbors(self.X, self.Y) if (x, y) in self.covered)
 		# 	return Action(AI.Action.UNCOVER, self.X, self.Y)
+		if number != -1:
+			self.board[(self.X, self.Y)] = number
+
 		if(self.safe):
 			self.X, self.Y = self.safe.pop()
 			return Action(AI.Action.UNCOVER, self.X, self.Y)
-		neighbors = self.getNeighbors(self.X, self.Y)
-		covered_neighbors = [n for n in neighbors if n in self.covered]
-		flagged_neighbors = [n for n in neighbors if n in self.flags]
-		if(number == len(flagged_neighbors) + len(covered_neighbors)):
-			for covered in covered_neighbors:
-				self.flags.add(covered)
-				self.covered.remove(covered)
-				self.moves.append(Action(AI.Action.FLAG, covered[0], covered[1]))
+		if not self.moves:
+			for (cx, cy), hint in self.board.items():
+				neighbors = self.getNeighbors(cx, cy)
+				covered_neighbors = [n for n in neighbors if n in self.covered]
+				flagged_neighbors = [n for n in neighbors if n in self.flags]
 
-		elif(number == len(flagged_neighbors) and covered_neighbors):
-			for covered in covered_neighbors:
-				self.covered.remove(covered)
-				self.moves.append(Action(AI.Action.UNCOVER, covered[0], covered[1]))
+				if hint == len(flagged_neighbors) + len(covered_neighbors) and covered_neighbors:
+					for covered in covered_neighbors:
+						if covered in self.covered: # Safety check
+							self.flags.add(covered)
+							self.covered.remove(covered)
+							self.moves.append(Action(AI.Action.FLAG, covered[0], covered[1]))
 
-		elif (len(self.flags) == self.totalMines):
-			for covered in self.covered:
+				elif hint == len(flagged_neighbors) and covered_neighbors:
+					for covered in covered_neighbors:
+						if covered in self.covered: # Safety check
+							self.covered.remove(covered)
+							self.moves.append(Action(AI.Action.UNCOVER, covered[0], covered[1]))
+
+		if (len(self.flags) == self.totalMines and not self.moves):
+			for covered in list(self.covered):
 				self.covered.remove(covered)
 				self.moves.append(Action(AI.Action.UNCOVER, covered[0], covered[1]))
 
 		if self.moves:
-			self.X, self.Y = self.moves[0].getX(), self.moves[0].getY()
-			return self.moves.pop(0)
+			next_move = self.moves.pop(0)
+			if next_move.getMove() == AI.Action.UNCOVER:
+				self.X, self.Y = next_move.getX(), next_move.getY()
+			return next_move
 		
 		if(not self.covered):
 			return Action(AI.Action.LEAVE)
 		
-		return Action(AI.Action.LEAVE)
+		guess = self.covered.pop()
+		self.X, self.Y = guess[0], guess[1]
+		return Action(AI.Action.UNCOVER, self.X, self.Y)
 		########################################################################
 		#							YOUR CODE ENDS							   #
 		########################################################################
