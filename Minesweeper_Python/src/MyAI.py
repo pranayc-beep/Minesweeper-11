@@ -58,6 +58,7 @@ class MyAI( AI ):
 		if(self.safe):
 			self.X, self.Y = self.safe.pop()
 			return Action(AI.Action.UNCOVER, self.X, self.Y)
+		
 		if not self.moves:
 			for (cx, cy), hint in self.board.items():
 				neighbors = self.getNeighbors(cx, cy)
@@ -66,14 +67,38 @@ class MyAI( AI ):
 
 				if hint == len(flagged_neighbors) + len(covered_neighbors) and covered_neighbors:
 					for covered in covered_neighbors:
-						if covered in self.covered: # Safety check
+						if covered in self.covered:
 							self.flags.add(covered)
 							self.covered.remove(covered)
 							self.moves.append(Action(AI.Action.FLAG, covered[0], covered[1]))
 
 				elif hint == len(flagged_neighbors) and covered_neighbors:
 					for covered in covered_neighbors:
-						if covered in self.covered: # Safety check
+						if covered in self.covered:
+							self.covered.remove(covered)
+							self.moves.append(Action(AI.Action.UNCOVER, covered[0], covered[1]))
+
+		if not(self.moves):
+			boundary_cells = {}
+			for (cx, cy), hint in self.board.items():
+				neighbors = self.getNeighbors(cx, cy)
+				covered_neighbors = [n for n in neighbors if n in self.covered]
+				if covered_neighbors:
+					flags = [n for n in neighbors if n in self.flags]
+					boundary_cells[(cx, cy)] = covered_neighbors
+			for cell, covered_neighbors in boundary_cells.items():
+				hint = self.board[cell]
+				flags = [n for n in self.getNeighbors(cell[0], cell[1]) if n in self.flags]
+				if hint == len(flags) + len(covered_neighbors):
+					for covered in covered_neighbors:
+						if covered in self.covered:
+							self.flags.add(covered)
+							self.covered.remove(covered)
+							self.moves.append(Action(AI.Action.FLAG, covered[0], covered[1]))
+
+				elif hint == len(flags):
+					for covered in covered_neighbors:
+						if covered in self.covered:
 							self.covered.remove(covered)
 							self.moves.append(Action(AI.Action.UNCOVER, covered[0], covered[1]))
 
