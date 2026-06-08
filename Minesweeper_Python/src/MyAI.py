@@ -48,77 +48,128 @@ class MyAI( AI ):
 		return neighbors
 	
 	def getAction(self, number: int) -> "Action Object":
-		# if(number == 0):
-		# 	self.covered.remove((self.X, self.Y))
-		# 	self.safe.update((x, y) for x, y in self.getNeighbors(self.X, self.Y) if (x, y) in self.covered)
-		# 	return Action(AI.Action.UNCOVER, self.X, self.Y)
 		if number != -1:
 			self.board[(self.X, self.Y)] = number
-
-		if(self.safe):
+		
+		if self.safe:
 			self.X, self.Y = self.safe.pop()
 			return Action(AI.Action.UNCOVER, self.X, self.Y)
 		
-		if not self.moves:
-			for (cx, cy), hint in self.board.items():
-				neighbors = self.getNeighbors(cx, cy)
-				covered_neighbors = [n for n in neighbors if n in self.covered]
-				flagged_neighbors = [n for n in neighbors if n in self.flags]
-
-				if hint == len(flagged_neighbors) + len(covered_neighbors) and covered_neighbors:
-					for covered in covered_neighbors:
-						if covered in self.covered:
-							self.flags.add(covered)
-							self.covered.remove(covered)
-							self.moves.append(Action(AI.Action.FLAG, covered[0], covered[1]))
-
-				elif hint == len(flagged_neighbors) and covered_neighbors:
-					for covered in covered_neighbors:
-						if covered in self.covered:
-							self.covered.remove(covered)
-							self.moves.append(Action(AI.Action.UNCOVER, covered[0], covered[1]))
-
-		if not(self.moves):
-			boundary_cells = {}
-			for (cx, cy), hint in self.board.items():
-				neighbors = self.getNeighbors(cx, cy)
-				covered_neighbors = [n for n in neighbors if n in self.covered]
-				if covered_neighbors:
-					flags = [n for n in neighbors if n in self.flags]
-					boundary_cells[(cx, cy)] = covered_neighbors
-			for cell, covered_neighbors in boundary_cells.items():
-				hint = self.board[cell]
-				flags = [n for n in self.getNeighbors(cell[0], cell[1]) if n in self.flags]
-				if hint == len(flags) + len(covered_neighbors):
-					for covered in covered_neighbors:
-						if covered in self.covered:
-							self.flags.add(covered)
-							self.covered.remove(covered)
-							self.moves.append(Action(AI.Action.FLAG, covered[0], covered[1]))
-
-				elif hint == len(flags):
-					for covered in covered_neighbors:
-						if covered in self.covered:
-							self.covered.remove(covered)
-							self.moves.append(Action(AI.Action.UNCOVER, covered[0], covered[1]))
-
-		if (len(self.flags) == self.totalMines and not self.moves):
-			for covered in list(self.covered):
-				self.covered.remove(covered)
-				self.moves.append(Action(AI.Action.UNCOVER, covered[0], covered[1]))
-
 		if self.moves:
 			next_move = self.moves.pop(0)
 			if next_move.getMove() == AI.Action.UNCOVER:
 				self.X, self.Y = next_move.getX(), next_move.getY()
 			return next_move
-		
-		if(not self.covered):
+
+		for (cx, cy), hint in self.board.items():
+			neighbors = self.getNeighbors(cx, cy)
+			cov = [n for n in neighbors if n in self.covered]
+			flg = [n for n in neighbors if n in self.flags]
+
+			if hint == len(flg) + len(cov) and cov:
+				for c in cov:
+					if c in self.covered:
+						self.flags.add(c)
+						self.covered.remove(c)
+						self.moves.append(Action(AI.Action.FLAG, c[0], c[1]))
+			elif hint == len(flg) and cov:
+				for c in cov:
+					if c in self.covered:
+						self.safe.add(c)
+						self.covered.remove(c)
+
+		if self.safe:
+			self.X, self.Y = self.safe.pop()
+			return Action(AI.Action.UNCOVER, self.X, self.Y)
+		if self.moves:
+			return self.moves.pop(0)
+
+		boundary = {}
+		for (cx, cy), hint in self.board.items():
+			neighbors = self.getNeighbors(cx, cy)
+			cov = set(n for n in neighbors if n in self.covered)
+			if cov:
+				flg = set(n for n in neighbors if n in self.flags)
+				boundary[(cx, cy)] = (cov, hint - len(flg))
+
+		for cellA, (covA, effA) in boundary.items():
+			for cellB, (covB, effB) in boundary.items():
+				if cellA == cellB: continue
+				
+				if covA.issubset(covB) and len(covB) > len(covA):
+					diff_cov = covB - covA
+					diff_eff = effB - effA
+
+					if diff_eff == 0:
+						for c in diff_cov:
+							if c in self.covered:
+								self.safe.add(c)
+								self.covered.remove(c)
+					
+					elif diff_eff == len(diff_cov):
+						for c in diff_cov:
+							if c in self.covered:
+								self.flags.add(c)
+								self.covered.remove(c)
+								self.moves.append(Action(AI.Action.FLAG, c[0], c[1]))
+
+		if self.safe:
+			self.X, self.Y = self.safe.pop()
+			return Action(AI.Action.UNCOVER, self.X, self.Y)
+		if self.moves:
+			return self.moves.pop(0)
+
+		if len(self.flags) == self.totalMines and self.covered:
+			for c in list(self.covered):
+				self.safe.add(c)
+				self.covered.remove(c)
+			self.X, self.Y = self.safe.pop()
+			return Action(AI.Action.UNCOVER, self.X, self.Y)
+
+		if not self.covered:
 			return Action(AI.Action.LEAVE)
+
+		frontier = set()
+		for cov, eff in boundary.values():
+			frontier.update(cov)
 		
+		non_frontier = self.covered - frontier
+		mines_left = self.totalMines - len(self.flags)
+		global_risk = mines_left / len(self.covered) if len(self.covered) > 0 else 1.0
+		best_frontier_guess = None
+		best_frontier_risk = 1.0
+		
+		if boundary:
+			cell_risk = {}
+			for (cx, cy), (cov, eff) in boundary.items():
+				risk = eff / len(cov) if len(cov) > 0 else 1.0
+				for c in cov:
+					if c not in cell_risk or risk > cell_risk[c]:
+						cell_risk[c] = risk
+			
+			if cell_risk:
+				best_frontier_guess = min(cell_risk, key=cell_risk.get)
+				best_frontier_risk = cell_risk[best_frontier_guess]
+
+		if non_frontier and global_risk <= best_frontier_risk:
+			corners = {(0, 0), (self.colDimension - 1, 0), 
+					   (0, self.rowDimension - 1), (self.colDimension - 1, self.rowDimension - 1)}
+			available_corners = non_frontier.intersection(corners)
+			
+			if available_corners:
+				guess = available_corners.pop()
+			else:
+				guess = non_frontier.pop()
+				
+			self.covered.remove(guess)
+			self.X, self.Y = guess[0], guess[1]
+			return Action(AI.Action.UNCOVER, self.X, self.Y)
+			
+		elif best_frontier_guess:
+			self.covered.remove(best_frontier_guess)
+			self.X, self.Y = best_frontier_guess[0], best_frontier_guess[1]
+			return Action(AI.Action.UNCOVER, self.X, self.Y)
+
 		guess = self.covered.pop()
 		self.X, self.Y = guess[0], guess[1]
 		return Action(AI.Action.UNCOVER, self.X, self.Y)
-		########################################################################
-		#							YOUR CODE ENDS							   #
-		########################################################################
